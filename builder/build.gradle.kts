@@ -24,8 +24,11 @@ abstract class CopyPlayerTemplate : DefaultTask() {
             val names = zip.entries().asSequence().map { it.name }.toList()
             val icons = names.filter { Regex("^res/mipmap-[a-z]+(-v\\d+)?/ic_launcher(_foreground|_background)?\\.png$").matches(it) }
             check(icons.isNotEmpty()) {
-                "Player template has no res/mipmap-*/ic_launcher*.png entries (resource paths were shortened?). " +
-                    "Make sure :player release has isMinifyEnabled = false and isShrinkResources = false."
+                val resEntries = names.filter { it.startsWith("res/") }.sorted()
+                "Player template has no res/mipmap-*/ic_launcher*.png entries, so ROM Packer could not " +
+                    "swap icons per game. AGP's optimizeReleaseResources shortens resource paths; keep " +
+                    "android.enableResourceOptimizations=false in gradle.properties. " +
+                    "Resource entries found (${resEntries.size}): " + resEntries.take(40).joinToString(", ")
             }
             check(names.any { it.startsWith("lib/") && it.endsWith("libmgba_libretro_android.so") }) {
                 "Player template is missing the mGBA core (lib/*/libmgba_libretro_android.so)."

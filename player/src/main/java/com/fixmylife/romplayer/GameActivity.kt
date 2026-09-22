@@ -2,6 +2,7 @@ package com.fixmylife.romplayer
 
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.RectF
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -20,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import com.swordfish.libretrodroid.GLRetroView
 import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
-import com.swordfish.libretrodroid.ViewportAlignment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,7 +63,6 @@ class GameActivity : ComponentActivity() {
             savesDirectory = filesDir.absolutePath
             saveRAMState = sramFile.takeIf { it.isFile }?.readBytes()
             shader = ShaderConfig.Sharp
-            viewportAlignment = alignmentFor(resources.configuration)
             rumbleEventsEnabled = false
             preferLowLatencyAudio = true
         }
@@ -90,7 +89,10 @@ class GameActivity : ComponentActivity() {
 
         lifecycleScope.launch {
             view.getGLRetroEvents().collect { event ->
-                if (event is GLRetroView.GLRetroEvents.FrameRendered) gameReady = true
+                if (event is GLRetroView.GLRetroEvents.FrameRendered && !gameReady) {
+                    gameReady = true
+                    view.viewport = viewportFor(resources.configuration)
+                }
             }
         }
         lifecycleScope.launch {
@@ -162,7 +164,7 @@ class GameActivity : ComponentActivity() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        retroView?.viewportAlignment = alignmentFor(newConfig)
+        if (gameReady) retroView?.viewport = viewportFor(newConfig)
         goImmersive()
     }
 
@@ -209,8 +211,9 @@ class GameActivity : ComponentActivity() {
 
     // ---- helpers ----
 
-    private fun alignmentFor(config: Configuration) =
-        if (config.orientation == Configuration.ORIENTATION_PORTRAIT) ViewportAlignment.TOP else ViewportAlignment.CENTER
+    /** Portrait: game in the top half, controls below. Landscape: full screen. */
+    private fun viewportFor(config: Configuration) =
+        if (config.orientation == Configuration.ORIENTATION_PORTRAIT) RectF(0f, 0f, 1f, 0.52f) else RectF(0f, 0f, 1f, 1f)
 
     private fun goImmersive() {
         WindowCompat.setDecorFitsSystemWindows(window, false)

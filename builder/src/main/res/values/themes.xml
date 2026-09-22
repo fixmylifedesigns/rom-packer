@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.RomPacker" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#7B2FF7</item>
+        <item name="android:colorPrimary">#7B2FF7</item>
+    </style>
+</resources>

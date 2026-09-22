@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.zip.ZipFile
 
 plugins {
@@ -40,7 +41,7 @@ abstract class CopyPlayerTemplate : DefaultTask() {
 val releaseKeystore: File = layout.buildDirectory.file("rompacker.jks").get().asFile.also { jks ->
     if (!jks.isFile) {
         jks.parentFile.mkdirs()
-        jks.writeBytes(java.util.Base64.getDecoder().decode(file("rompacker.jks.b64").readText().trim()))
+        jks.writeBytes(Base64.getDecoder().decode(file("rompacker.jks.b64").readText().trim()))
     }
 }
 

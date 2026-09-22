@@ -24,11 +24,8 @@ abstract class CopyPlayerTemplate : DefaultTask() {
             val names = zip.entries().asSequence().map { it.name }.toList()
             val icons = names.filter { Regex("^res/mipmap-[a-z]+(-v\\d+)?/ic_launcher(_foreground|_background)?\\.png$").matches(it) }
             check(icons.isNotEmpty()) {
-                val resEntries = names.filter { it.startsWith("res/") }.sorted()
-                "Player template has no res/mipmap-*/ic_launcher*.png entries, so ROM Packer could not " +
-                    "swap icons per game. AGP's optimizeReleaseResources shortens resource paths; keep " +
-                    "android.enableResourceOptimizations=false in gradle.properties. " +
-                    "Resource entries found (${resEntries.size}): " + resEntries.take(40).joinToString(", ")
+                "Player template has no res/mipmap-*/ic_launcher*.png entries (resource paths were shortened?). " +
+                    "Make sure :player release has isMinifyEnabled = false and isShrinkResources = false."
             }
             check(names.any { it.startsWith("lib/") && it.endsWith("libmgba_libretro_android.so") }) {
                 "Player template is missing the mGBA core (lib/*/libmgba_libretro_android.so)."
@@ -88,6 +85,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // apksig and BouncyCastle reference java.nio.file / java.util.function,
+        // which don't exist below API 26. Desugaring backports them.
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions { jvmTarget = "17" }
 
@@ -116,6 +116,7 @@ androidComponents {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.2")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")

@@ -35,10 +35,29 @@ jobs:
             echo '## Build errors'
             echo '```'
             grep -E '^e: ' build.log | head -40 || true
-            sed -n '/What went wrong/,/\* Try/p' build.log | head -60 || true
+            sed -n '/What went wrong/,/* Try/p' build.log | head -60 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           grep -E '^e: ' build.log | head -20 | while read -r line; do echo "::error::$line"; done || true
+
+      # Publishes the tail of the log to the ci-logs branch so failures can be
+      # read without downloading artifacts.
+      - name: Publish failure log
+        if: failure()
+        run: |
+          tail -c 200000 build.log > /tmp/build.log
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git fetch origin ci-logs || true
+          git checkout -B ci-logs origin/ci-logs 2>/dev/null || git checkout --orphan ci-logs
+          git rm -rf --cached . >/dev/null 2>&1 || true
+          find . -maxdepth 1 -mindepth 1 ! -name .git -exec rm -rf {} + 2>/dev/null || true
+          mkdir -p logs
+          cp /tmp/build.log "logs/run-${{ github.run_number }}.log"
+          cp /tmp/build.log logs/latest.log
+          git add logs
+          git commit -m "CI log for run ${{ github.run_number }}"
+          git push -f origin ci-logs
 
       - name: Collect APK
         run: cp builder/build/outputs/apk/release/builder-release.apk RomPacker.apk

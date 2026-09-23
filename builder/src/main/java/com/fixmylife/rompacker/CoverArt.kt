@@ -12,15 +12,14 @@ import java.util.zip.CRC32
 /**
  * Finds box art without any API key.
  *
- * Two open sources:
- *  - No-Intro dat files mirrored in libretro-database, which map a ROM's CRC32
- *    and (for GBA) its 4-character game code to the canonical game name.
+ * Three open sources:
+ *  - libretro-database's serial dats, which map a full cartridge serial
+ *    (CGB-BXTJ-JPN) to the canonical game name for all three systems.
+ *  - the No-Intro dats in the same repo, which add CRC32 for every entry.
  *  - libretro-thumbnails, whose Named_Boxarts folders are keyed by that name.
  *
- * Caveat worth knowing: the GBA dat carries game codes for 3218 of its 3692
- * entries, but the Game Boy and Game Boy Color dats carry almost none (6 and
- * 80), so a code like CGB-BXRJ-JPN usually cannot be resolved for those.
- * Matching the ROM's own CRC32 works for all three systems and is tried first.
+ * Lookups are tried in order: full serial, then the 4-character code inside it,
+ * then the loaded ROM's own checksum, then a title search.
  */
 object CoverArt {
 
@@ -28,6 +27,8 @@ object CoverArt {
 
     private const val DAT_BASE =
         "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/no-intro"
+    private const val SERIAL_BASE =
+        "https://raw.githubusercontent.com/libretro/libretro-database/master/metadat/serial"
     private const val THUMB_BASE = "https://raw.githubusercontent.com/libretro-thumbnails"
     private const val CACHE_DAYS = 14L
 
@@ -41,12 +42,18 @@ object CoverArt {
 
     private fun thumbRepo(system: GameSystem) = datName(system).replace(' ', '_')
 
-    /** Accepts "CGB-BXRJ-JPN", "AGB-BPRE", or a bare "BPRE". */
+    /** Accepts "CGB-BXTJ-JPN", "AGB-BPRE", or a bare "BPRE". */
     fun parseGameCode(input: String): String? {
         val parts = input.trim().uppercase().split('-', ' ').filter { it.isNotBlank() }
         return parts.firstOrNull { part ->
             part.length == 4 && part.all { it.isLetterOrDigit() } && part !in SYSTEM_PREFIXES
         }
+    }
+
+    /** "CGB-BXTJ-JPN" -> "BXTJ". A bare code is returned unchanged. */
+    private fun codeOf(serial: String?): String? {
+        val parts = serial?.uppercase()?.split('-') ?: return null
+        return parts.firstOrNull { it.length == 4 && it !in SYSTEM_PREFIXES }
     }
 
     /** The game code stored in the cartridge header, if the header has one. */
@@ -57,7 +64,7 @@ object CoverArt {
         return code.takeIf { it.all { c -> c in 'A'..'Z' || c in '0'..'9' } }
     }
 
-    /** Full cartridge serial, e.g. CGB-BXRJ-JPN, rebuilt from the header. */
+    /** Full cartridge serial, e.g. CGB-BXTJ-JPN, rebuilt from the header. */
     fun headerSerial(rom: ByteArray, system: GameSystem): String? {
         val code = headerCode(rom, system) ?: return null
         val prefix = when (system) {
@@ -84,22 +91,37 @@ object CoverArt {
     }
 
     /**
-     * Looks up a game code, then falls back to treating the input as a title.
-     * Results are ordered best-first.
+     * Full serial, then game code, then the loaded ROM's checksum, then title.
+     * Passing the ROM lets a code that matches this cartridge resolve even when
+     * the database has no entry for it.
      */
-    fun search(context: Context, system: GameSystem, query: String): List<Match> {
+    fun search(context: Context, system: GameSystem, query: String, rom: ByteArray? = null): List<Match> {
         val all = entries(context, system)
-        val code = parseGameCode(query)
+        val trimmed = query.trim()
+        val wanted = trimmed.uppercase()
+
+        // 1. exact serial, e.g. CGB-BXTJ-JPN
+        all.filter { it.serial?.uppercase() == wanted }.let { if (it.isNotEmpty()) return it }
+
+        // 2. the 4-character code inside it, e.g. BXTJ
+        val code = parseGameCode(trimmed)
         if (code != null) {
-            val bySerial = all.filter { it.serial.equals(code, ignoreCase = true) }
-            if (bySerial.isNotEmpty()) return bySerial
+            all.filter { codeOf(it.serial) == code }.let { if (it.isNotEmpty()) return it }
+
+            // 3. the code belongs to the ROM that's loaded, so identify it by checksum
+            if (rom != null && headerCode(rom, system) == code) {
+                byChecksum(context, system, rom)?.let { return listOf(it) }
+            }
         }
-        val terms = query.lowercase()
+
+        // 4. title words
+        val terms = trimmed.lowercase()
             .replace(Regex("\\b(dmg|cgb|agb|jpn|usa|eur)\\b"), " ")
             .split(Regex("[^a-z0-9]+"))
             .filter { it.length > 1 }
         if (terms.isEmpty()) return emptyList()
         return all.filter { m -> terms.all { m.name.lowercase().contains(it) } }
+            .distinctBy { it.name }
             .sortedBy { it.name.length }
             .take(25)
     }
@@ -120,28 +142,39 @@ object CoverArt {
     private val cache = HashMap<GameSystem, List<Match>>()
 
     @Synchronized
-    private fun entries(context: Context, system: GameSystem): List<Match> =
-        cache.getOrPut(system) { parse(datText(context, system)) }
+    private fun entries(context: Context, system: GameSystem): List<Match> = cache.getOrPut(system) {
+        // The serial dat carries cartridge serials; the No-Intro dat carries CRC32
+        // for everything. Both name games identically, so they merge cleanly.
+        parseSerialDat(datText(context, system, SERIAL_BASE, "serial")) +
+            parse(datText(context, system, DAT_BASE, "nointro"))
+    }
 
-    private fun datText(context: Context, system: GameSystem): String {
-        val file = File(context.cacheDir, "nointro-${system.ext}.dat")
+    private fun datText(context: Context, system: GameSystem, base: String, tag: String): String {
+        val file = File(context.cacheDir, "$tag-${system.ext}.dat")
         val fresh = file.isFile && file.length() > 0 &&
             System.currentTimeMillis() - file.lastModified() < CACHE_DAYS * 24 * 3600 * 1000
         if (!fresh) {
-            val bytes = download("$DAT_BASE/${encode(datName(system))}.dat")
+            val bytes = download("$base/${encode(datName(system))}.dat")
             if (bytes != null) file.writeBytes(bytes) else if (!file.isFile) return ""
         }
         return file.readText(Charsets.UTF_8)
     }
 
     private val NAME_RE = Regex("""\bname\s+"([^"]+)"""")
+    private val COMMENT_RE = Regex("""\bcomment\s+"([^"]+)"""")
     private val SERIAL_RE = Regex("""\bserial\s+"([^"]+)"""")
     private val CRC_RE = Regex("""\bcrc\s+([0-9A-Fa-f]{8})""")
 
-    private fun parse(text: String): List<Match> {
+    /** Serial dat entries: comment "Name" / serial "CGB-BXTJ-JPN" / rom ( crc XXXXXXXX ) */
+    private fun parseSerialDat(text: String): List<Match> = parseBlocks(text, COMMENT_RE)
+
+    /** No-Intro dat entries: name "Name" / rom ( ... crc XXXXXXXX ... ) */
+    private fun parse(text: String): List<Match> = parseBlocks(text, NAME_RE)
+
+    private fun parseBlocks(text: String, titleRegex: Regex): List<Match> {
         if (text.isBlank()) return emptyList()
         return text.split("\ngame (").drop(1).mapNotNull { block ->
-            val name = NAME_RE.find(block)?.groupValues?.get(1) ?: return@mapNotNull null
+            val name = titleRegex.find(block)?.groupValues?.get(1) ?: return@mapNotNull null
             val serial = SERIAL_RE.find(block)?.groupValues?.get(1)?.split(',')?.firstOrNull()?.trim()
             val crc = CRC_RE.find(block)?.groupValues?.get(1)?.uppercase()
             Match(name, serial, crc)

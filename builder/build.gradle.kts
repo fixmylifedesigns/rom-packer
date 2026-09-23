@@ -106,10 +106,12 @@ android {
 }
 
 val builderIcons = tasks.register<GenerateLauncherIcons>("generateLauncherIcons") {
-    background.set(0xFF8B5CF6.toInt())
-    backgroundEnd.set(0xFF3B2A78.toInt())
+    // Gradient sampled from the artwork itself, so the adaptive background matches it.
+    background.set(0xFF6111DE.toInt())
+    backgroundEnd.set(0xFF0F0DAA.toInt())
     body.set(0xFFF2EFF7.toInt())
     accent.set(0xFF241F2E.toInt())
+    sourceImage.set(layout.projectDirectory.file("icon-source.png.b64"))
 }
 
 androidComponents {

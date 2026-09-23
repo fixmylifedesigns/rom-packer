@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -139,6 +140,26 @@ class MainActivity : ComponentActivity() {
         packageId.doAfterTextChanged { if (packageId.hasFocus()) packageEdited = true }
 
         if (Updater.shouldAutoCheck(this)) checkForUpdate(manual = false)
+
+        handleIncoming(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncoming(intent)
+    }
+
+    /** A ROM opened from a file manager, the Downloads list, or the share sheet. */
+    private fun handleIncoming(intent: Intent?) {
+        val uri = when (intent?.action) {
+            Intent.ACTION_VIEW -> intent.data
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            else -> null
+        } ?: return
+        // Clear it so a later recreate doesn't reload the same file over the user's work.
+        intent.action = null
+        loadRom(uri)
     }
 
     /** Compares the installed build number against the newest GitHub release. */

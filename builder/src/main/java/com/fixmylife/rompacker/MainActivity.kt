@@ -30,6 +30,7 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var romInfoText: TextView
+    private lateinit var romMetaText: TextView
     private lateinit var iconCrop: IconCropView
     private lateinit var gameCode: EditText
     private lateinit var appName: EditText
@@ -84,6 +85,7 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
 
         romInfoText = findViewById(R.id.romInfo)
+        romMetaText = findViewById(R.id.romMeta)
         iconCrop = findViewById(R.id.iconCrop)
         gameCode = findViewById(R.id.gameCode)
         appName = findViewById(R.id.appName)
@@ -110,12 +112,20 @@ class MainActivity : ComponentActivity() {
         findViewById<TextView>(R.id.version).text = "build ${Updater.installedVersion(this)}"
         findViewById<Button>(R.id.checkUpdate).setOnClickListener { checkForUpdate(manual = true) }
 
-        slider(R.id.brightness) { iconCrop.brightness = (it - 50) / 50f }
-        // 0 -> 0.5x, 50 -> neutral, 100 -> 2.5x
-        slider(R.id.contrast) {
-            iconCrop.contrast = if (it <= 50) 0.5f + it / 100f else 1f + (it - 50) / 33f
+        slider(R.id.brightness, R.id.brightnessValue) {
+            iconCrop.brightness = (it - 50) / 50f
+            "${it - 50}"
         }
-        slider(R.id.saturation) { iconCrop.saturation = it / 50f }
+        // 0 -> 0.5x, 50 -> neutral, 100 -> 2.5x
+        slider(R.id.contrast, R.id.contrastValue) {
+            val value = if (it <= 50) 0.5f + it / 100f else 1f + (it - 50) / 33f
+            iconCrop.contrast = value
+            "${(value * 100).toInt()}%"
+        }
+        slider(R.id.saturation, R.id.saturationValue) {
+            iconCrop.saturation = it / 50f
+            "${it * 2}%"
+        }
 
         buildBtn.setOnClickListener { build() }
         installBtn.setOnClickListener { install() }
@@ -189,10 +199,10 @@ class MainActivity : ComponentActivity() {
             }
             romBytes = bytes
             romInfo = info
-            romInfoText.text = buildString {
-                append(fileName ?: "ROM").append('\n')
+            romInfoText.text = fileName ?: "ROM"
+            romMetaText.text = buildString {
                 append(info.system.label).append(" \u00b7 ").append(bytes.size / 1024).append(" KB")
-                if (info.headerTitle.isNotBlank()) append(" \u00b7 header: ").append(info.headerTitle)
+                if (info.headerTitle.isNotBlank()) append(" \u00b7 ").append(info.headerTitle)
             }
             appName.setText(info.suggestedName)
             if (!packageEdited) packageId.setText(ManifestRewriter.suggestPackage(info.suggestedName))
@@ -311,9 +321,14 @@ class MainActivity : ComponentActivity() {
             if (c.moveToFirst()) c.getString(0) else null
         }
 
-    private fun slider(id: Int, apply: (Int) -> Unit) {
+    /** Wires a slider and keeps its readout in sync; the lambda returns the label. */
+    private fun slider(id: Int, labelId: Int, apply: (Int) -> String) {
+        val label = findViewById<TextView>(labelId)
         findViewById<SeekBar>(id).setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) = apply(value)
+            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) {
+                label.text = apply(value)
+            }
+
             override fun onStartTrackingTouch(bar: SeekBar) = Unit
             override fun onStopTrackingTouch(bar: SeekBar) = Unit
         })

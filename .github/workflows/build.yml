@@ -26,7 +26,7 @@ jobs:
       - name: Build ROM Packer (includes the player template)
         run: |
           set -o pipefail
-          gradle :builder:assembleRelease --stacktrace 2>&1 | tee build.log
+          gradle :builder:assembleRelease -Prompack.build=${{ github.run_number }} --stacktrace 2>&1 | tee build.log
 
       - name: Report build errors
         if: failure()
@@ -48,9 +48,11 @@ jobs:
           git config user.email "ci@users.noreply.github.com"
           git checkout --orphan ci-logs-tmp
           git rm -rq --cached .
-          cp /tmp/build.log build.log
-          git add -f build.log
-          git commit -qm "CI log for ${{ github.sha }}"
+          mkdir -p logs
+          cp /tmp/build.log logs/run-${{ github.run_number }}.log
+          cp /tmp/build.log logs/latest.log
+          git add -f logs
+          git commit -qm "CI log for run ${{ github.run_number }}"
           git push -qf origin HEAD:ci-logs
 
       - name: Collect APK

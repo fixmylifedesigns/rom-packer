@@ -60,8 +60,11 @@ android {
         applicationId = "com.fixmylife.rompacker"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI passes -Prompack.build=<run number>, and tags the release build-<run number>,
+        // so the in-app updater can compare the two as plain integers.
+        val buildNumber = (findProperty("rompack.build") as String? ?: "1").toInt()
+        versionCode = buildNumber
+        versionName = "build-$buildNumber"
     }
 
     signingConfigs {

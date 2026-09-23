@@ -107,6 +107,8 @@ class MainActivity : ComponentActivity() {
             iconCrop.setBitmap(iconSource)
         }
         findViewById<Button>(R.id.findCover).setOnClickListener { findCover() }
+        findViewById<TextView>(R.id.version).text = "build ${Updater.installedVersion(this)}"
+        findViewById<Button>(R.id.checkUpdate).setOnClickListener { checkForUpdate(manual = true) }
 
         slider(R.id.brightness) { iconCrop.brightness = (it - 50) / 50f }
         // 0 -> 0.5x, 50 -> neutral, 100 -> 2.5x
@@ -125,6 +127,49 @@ class MainActivity : ComponentActivity() {
             }
         }
         packageId.doAfterTextChanged { if (packageId.hasFocus()) packageEdited = true }
+
+        if (Updater.shouldAutoCheck(this)) checkForUpdate(manual = false)
+    }
+
+    /** Compares the installed build number against the newest GitHub release. */
+    private fun checkForUpdate(manual: Boolean) {
+        if (manual) toast("Checking\u2026")
+        lifecycleScope.launch {
+            val release = withContext(Dispatchers.IO) { Updater.latest() }
+            Updater.markChecked(this@MainActivity)
+            val installed = Updater.installedVersion(this@MainActivity)
+            when {
+                release == null -> if (manual) toast("Couldn't reach GitHub")
+                release.versionCode <= installed ->
+                    if (manual) toast("You're on the latest build ($installed)")
+                else -> AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Update available")
+                    .setMessage(
+                        "You have build $installed. Build ${release.versionCode} is out " +
+                            "(${release.size / 1024 / 1024} MB). Download and install it?"
+                    )
+                    .setPositiveButton("Update") { _, _ -> downloadUpdate(release) }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun downloadUpdate(release: Updater.Release) {
+        setBusy(true, "Downloading ${release.tag}\u2026")
+        lifecycleScope.launch {
+            val apk = withContext(Dispatchers.IO) {
+                Updater.download(this@MainActivity, release) { pct ->
+                    lifecycleScope.launch { status.text = "Downloading ${release.tag}\u2026 $pct%" }
+                }
+            }
+            if (apk == null) {
+                setBusy(false, "Update download failed")
+            } else {
+                setBusy(false, "Ready to install ${release.tag}")
+                launchInstaller(apk)
+            }
+        }
     }
 
     private fun loadRom(uri: Uri) {
@@ -146,8 +191,8 @@ class MainActivity : ComponentActivity() {
             romInfo = info
             romInfoText.text = buildString {
                 append(fileName ?: "ROM").append('\n')
-                append(info.system.label).append(" · ").append(bytes.size / 1024).append(" KB")
-                if (info.headerTitle.isNotBlank()) append(" · header: ").append(info.headerTitle)
+                append(info.system.label).append(" \u00b7 ").append(bytes.size / 1024).append(" KB")
+                if (info.headerTitle.isNotBlank()) append(" \u00b7 header: ").append(info.headerTitle)
             }
             appName.setText(info.suggestedName)
             if (!packageEdited) packageId.setText(ManifestRewriter.suggestPackage(info.suggestedName))
@@ -173,7 +218,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val art = iconCrop.export(512) ?: IconMaker.placeholder(label, info.system)
-        setBusy(true, "Building $label…")
+        setBusy(true, "Building $label\u2026")
         lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
                 runCatching { buildApk(rom, info, label, pkg, art) }
@@ -232,9 +277,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun install() {
-        val apk = builtApk ?: return
+        launchInstaller(builtApk ?: return)
+    }
+
+    private fun launchInstaller(apk: File) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
-            toast("Allow ROM Packer to install apps, then tap Install again")
+            toast("Allow ROM Packer to install apps, then try again")
             startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
             )
@@ -297,7 +345,7 @@ class MainActivity : ComponentActivity() {
         val info = romInfo ?: return toast("Choose a ROM first")
         val query = gameCode.text.toString().trim()
         if (query.isEmpty()) return toast("Enter a game code or title")
-        setBusy(true, "Looking up $query…")
+        setBusy(true, "Looking up $query\u2026")
         lifecycleScope.launch {
             val matches = withContext(Dispatchers.IO) {
                 runCatching { CoverArt.search(this@MainActivity, info.system, query) }.getOrDefault(emptyList())
@@ -315,7 +363,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadCover(info: RomInfo, match: CoverArt.Match) {
-        setBusy(true, "Downloading cover…")
+        setBusy(true, "Downloading cover\u2026")
         lifecycleScope.launch {
             val art = withContext(Dispatchers.IO) {
                 runCatching { CoverArt.fetchBoxart(info.system, match.name) }.getOrNull()

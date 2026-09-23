@@ -106,9 +106,10 @@ android {
 }
 
 val builderIcons = tasks.register<GenerateLauncherIcons>("generateLauncherIcons") {
-    background.set(0xFF7B2FF7.toInt())
-    body.set(0xFFF0F0F5.toInt())
-    accent.set(0xFF7B2FF7.toInt())
+    background.set(0xFF8B5CF6.toInt())
+    backgroundEnd.set(0xFF3B2A78.toInt())
+    body.set(0xFFF2EFF7.toInt())
+    accent.set(0xFF241F2E.toInt())
 }
 
 androidComponents {

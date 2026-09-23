@@ -72,14 +72,16 @@ class VirtualPad(
     private var pressed = emptySet<Int>()
     private var dir = 0 to 0
 
-    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(64, 245, 245, 250) }
-    private val fillOn = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(150, 255, 255, 255) }
+    // Frosted-glass look from the redesign: a soft translucent fill, a hairline
+    // edge, and a violet wash on whatever is being pressed.
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(46, 240, 238, 250) }
+    private val fillOn = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(180, 139, 92, 246) }
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2.5f
-        color = Color.argb(120, 255, 255, 255)
+        strokeWidth = 2f
+        color = Color.argb(70, 255, 255, 255)
     }
-    private val pivot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(70, 255, 255, 255) }
+    private val pivot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(55, 255, 255, 255) }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(225, 255, 255, 255)
         textAlign = Paint.Align.CENTER

@@ -79,11 +79,12 @@ android {
     }
 }
 
-// Placeholder launcher icons (gray cartridge). ROM Packer replaces these per game.
+// Placeholder launcher icons. ROM Packer replaces these per game.
 val playerIcons = tasks.register<GenerateLauncherIcons>("generateLauncherIcons") {
-    background.set(0xFF3C3C46.toInt())
+    background.set(0xFF4A4458.toInt())
+    backgroundEnd.set(0xFF26222E.toInt())
     body.set(0xFFC8C8D2.toInt())
-    accent.set(0xFF5A5A64.toInt())
+    accent.set(0xFF3A3644.toInt())
 }
 
 androidComponents {

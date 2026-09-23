@@ -2,209 +2,281 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:background="@color/bg"
+    android:clipToPadding="false"
+    android:fitsSystemWindows="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="ROM Packer"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:alpha="0.7"
-            android:text="Turn a Game Boy / Color / Advance ROM into its own installable app." />
+        android:paddingStart="16dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="32dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="18dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <TextView
-                android:id="@+id/version"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:alpha="0.6"
-                android:textSize="12sp" />
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ROM Packer"
+                    android:textColor="@color/text_primary"
+                    android:textSize="26sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/version"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <Button
                 android:id="@+id/checkUpdate"
-                style="?android:attr/buttonBarButtonStyle"
+                style="@style/GhostButton"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Check for updates"
-                android:textSize="12sp" />
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:text="Updates" />
         </LinearLayout>
-
-        <Button
-            android:id="@+id/pickRom"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="1. Choose ROM (.gb / .gbc / .gba)" />
-
-        <TextView
-            android:id="@+id/romInfo"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            android:alpha="0.8"
-            android:text="No ROM selected" />
-
-        <com.fixmylife.rompacker.IconCropView
-            android:id="@+id/iconCrop"
-            android:layout_width="match_parent"
-            android:layout_height="240dp"
-            android:layout_gravity="center_horizontal"
-            android:background="#22888888" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:alpha="0.7"
-            android:text="Drag to move, pinch to zoom, double-tap to reset"
-            android:textSize="12sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:orientation="horizontal">
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/SectionLabel"
+                android:text="1 \u00b7 Game file" />
 
             <Button
-                android:id="@+id/pickIcon"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:text="Image" />
+                android:id="@+id/pickRom"
+                style="@style/GhostButton"
+                android:layout_width="match_parent"
+                android:text="Choose ROM \u00b7 .gb / .gbc / .gba" />
 
-            <Button
-                android:id="@+id/rotateIcon"
-                android:layout_width="0dp"
+            <TextView
+                android:id="@+id/romInfo"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
-                android:layout_weight="1"
-                android:text="Rotate" />
-
-            <Button
-                android:id="@+id/resetIcon"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Reset" />
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="2dp"
+                android:text="No ROM selected"
+                android:textColor="@color/text_muted"
+                android:textSize="13sp" />
         </LinearLayout>
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Brightness" />
-
-        <SeekBar
-            android:id="@+id/brightness"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="50" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Contrast" />
-
-        <SeekBar
-            android:id="@+id/contrast"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="50" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Saturation" />
-
-        <SeekBar
-            android:id="@+id/saturation"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:max="100"
-            android:progress="50" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Cover art \u2014 game code or title" />
-
-        <EditText
-            android:id="@+id/gameCode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="CGB-BXRJ-JPN or Pocket Monsters Crystal"
-            android:inputType="textCapCharacters|textNoSuggestions"
-            android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/findCover"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="12dp"
-            android:text="Find cover art" />
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="App name" />
+            <TextView
+                style="@style/SectionLabel"
+                android:text="2 \u00b7 Icon artwork" />
 
-        <EditText
-            android:id="@+id/appName"
+            <com.fixmylife.rompacker.IconCropView
+                android:id="@+id/iconCrop"
+                android:layout_width="match_parent"
+                android:layout_height="260dp"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/crop_backdrop" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:text="Drag to move \u00b7 pinch to zoom \u00b7 double-tap to reset"
+                android:textColor="@color/text_muted"
+                android:textSize="11sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/pickIcon"
+                    style="@style/GhostButton"
+                    android:layout_width="0dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:text="Image" />
+
+                <Button
+                    android:id="@+id/rotateIcon"
+                    style="@style/GhostButton"
+                    android:layout_width="0dp"
+                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
+                    android:text="Rotate" />
+
+                <Button
+                    android:id="@+id/resetIcon"
+                    style="@style/GhostButton"
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:text="Reset" />
+            </LinearLayout>
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_marginTop="16dp"
+                android:text="Brightness" />
+
+            <SeekBar
+                android:id="@+id/brightness"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:text="Contrast" />
+
+            <SeekBar
+                android:id="@+id/contrast"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:text="Saturation" />
+
+            <SeekBar
+                android:id="@+id/saturation"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="50" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Pokemon Crystal"
-            android:inputType="textCapWords"
-            android:maxLength="50" />
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Package id (unique per game)" />
+            <TextView
+                style="@style/SectionLabel"
+                android:text="3 \u00b7 Cover art" />
 
-        <EditText
-            android:id="@+id/packageId"
+            <EditText
+                android:id="@+id/gameCode"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/field"
+                android:hint="CGB-BXTJ-JPN or game title"
+                android:inputType="textCapCharacters|textNoSuggestions"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/findCover"
+                style="@style/GhostButton"
+                android:layout_width="match_parent"
+                android:layout_marginTop="10dp"
+                android:text="Find cover art" />
+        </LinearLayout>
+
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:hint="com.fixmylife.rom.mygame"
-            android:inputType="textNoSuggestions|textVisiblePassword"
-            android:textSize="14sp" />
+            android:layout_marginBottom="20dp"
+            android:background="@drawable/card"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                style="@style/SectionLabel"
+                android:text="4 \u00b7 App identity" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_marginBottom="6dp"
+                android:text="App name" />
+
+            <EditText
+                android:id="@+id/appName"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/field"
+                android:hint="Pokemon Crystal"
+                android:inputType="textCapWords"
+                android:maxLength="50"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@color/text_primary"
+                android:textSize="15sp" />
+
+            <TextView
+                style="@style/FieldLabel"
+                android:layout_marginTop="14dp"
+                android:layout_marginBottom="6dp"
+                android:text="Package id \u2014 unique per game" />
+
+            <EditText
+                android:id="@+id/packageId"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:background="@drawable/field"
+                android:fontFamily="monospace"
+                android:hint="com.fixmylife.rom.mygame"
+                android:inputType="textNoSuggestions|textVisiblePassword"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp" />
+        </LinearLayout>
 
         <Button
             android:id="@+id/build"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
+            android:layout_height="56dp"
+            android:background="@drawable/button_primary"
             android:enabled="false"
-            android:text="3. Build APK" />
+            android:stateListAnimator="@null"
+            android:text="Build APK"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp"
+            android:textStyle="bold" />
 
         <ProgressBar
             android:id="@+id/progress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:indeterminate="true"
             android:visibility="gone" />
 
@@ -212,8 +284,11 @@
             android:id="@+id/status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:textIsSelectable="true" />
+            android:layout_marginTop="10dp"
+            android:lineSpacingExtra="2dp"
+            android:textColor="@color/text_muted"
+            android:textIsSelectable="true"
+            android:textSize="13sp" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -223,8 +298,8 @@
 
             <Button
                 android:id="@+id/install"
+                style="@style/GhostButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_marginEnd="8dp"
                 android:layout_weight="1"
                 android:enabled="false"
@@ -232,11 +307,11 @@
 
             <Button
                 android:id="@+id/save"
+                style="@style/GhostButton"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:enabled="false"
-                android:text="Save APK\u2026" />
+                android:text="Save APK" />
         </LinearLayout>
     </LinearLayout>
 </ScrollView>

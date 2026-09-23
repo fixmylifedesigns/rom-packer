@@ -348,7 +348,7 @@ class MainActivity : ComponentActivity() {
         setBusy(true, "Looking up $query\u2026")
         lifecycleScope.launch {
             val matches = withContext(Dispatchers.IO) {
-                runCatching { CoverArt.search(this@MainActivity, info.system, query) }.getOrDefault(emptyList())
+                runCatching { CoverArt.search(this@MainActivity, info.system, query, romBytes) }.getOrDefault(emptyList())
             }
             setBusy(false, "")
             when {

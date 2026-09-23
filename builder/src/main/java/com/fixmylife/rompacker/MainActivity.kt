@@ -1,5 +1,6 @@
 package com.fixmylife.rompacker
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -10,8 +11,8 @@ import android.provider.Settings
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
-import android.widget.ImageView
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -29,7 +30,8 @@ import java.io.File
 class MainActivity : ComponentActivity() {
 
     private lateinit var romInfoText: TextView
-    private lateinit var iconPreview: ImageView
+    private lateinit var iconCrop: IconCropView
+    private lateinit var gameCode: EditText
     private lateinit var appName: EditText
     private lateinit var packageId: EditText
     private lateinit var buildBtn: Button
@@ -40,8 +42,9 @@ class MainActivity : ComponentActivity() {
 
     private var romBytes: ByteArray? = null
     private var romInfo: RomInfo? = null
-    private var icon: Bitmap? = null
     private var builtApk: File? = null
+    private var iconSource: Bitmap? = null
+    private var userPickedIcon = false
     private var packageEdited = false
 
     private val pickRom = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -52,9 +55,11 @@ class MainActivity : ComponentActivity() {
         uri ?: return@registerForActivityResult
         lifecycleScope.launch {
             val bmp = withContext(Dispatchers.IO) { runCatching { IconMaker.loadSquare(contentResolver, uri) }.getOrNull() }
-            if (bmp == null) toast("Couldn't read that image") else {
-                icon = bmp
-                iconPreview.setImageBitmap(bmp)
+            if (bmp == null) {
+                toast("Couldn't read that image")
+            } else {
+                userPickedIcon = true
+                setIconSource(bmp)
             }
         }
     }
@@ -79,7 +84,8 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
 
         romInfoText = findViewById(R.id.romInfo)
-        iconPreview = findViewById(R.id.iconPreview)
+        iconCrop = findViewById(R.id.iconCrop)
+        gameCode = findViewById(R.id.gameCode)
         appName = findViewById(R.id.appName)
         packageId = findViewById(R.id.packageId)
         buildBtn = findViewById(R.id.build)
@@ -92,6 +98,23 @@ class MainActivity : ComponentActivity() {
         findViewById<Button>(R.id.pickIcon).setOnClickListener {
             pickIcon.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
         }
+        findViewById<Button>(R.id.rotateIcon).setOnClickListener { iconCrop.rotate() }
+        findViewById<Button>(R.id.resetIcon).setOnClickListener {
+            iconCrop.resetAdjustments()
+            listOf(R.id.brightness, R.id.contrast, R.id.saturation).forEach {
+                findViewById<SeekBar>(it).progress = 50
+            }
+            iconCrop.setBitmap(iconSource)
+        }
+        findViewById<Button>(R.id.findCover).setOnClickListener { findCover() }
+
+        slider(R.id.brightness) { iconCrop.brightness = (it - 50) / 50f }
+        // 0 -> 0.5x, 50 -> neutral, 100 -> 2.5x
+        slider(R.id.contrast) {
+            iconCrop.contrast = if (it <= 50) 0.5f + it / 100f else 1f + (it - 50) / 33f
+        }
+        slider(R.id.saturation) { iconCrop.saturation = it / 50f }
+
         buildBtn.setOnClickListener { build() }
         installBtn.setOnClickListener { install() }
         saveBtn.setOnClickListener { builtApk?.let { saveApk.launch(it.name) } }
@@ -128,8 +151,10 @@ class MainActivity : ComponentActivity() {
             }
             appName.setText(info.suggestedName)
             if (!packageEdited) packageId.setText(ManifestRewriter.suggestPackage(info.suggestedName))
-            if (icon == null) iconPreview.setImageBitmap(IconMaker.placeholder(info.suggestedName, info.system))
+            if (iconSource == null) setIconSource(IconMaker.placeholder(info.suggestedName, info.system))
+            gameCode.setText(CoverArt.headerSerial(bytes, info.system).orEmpty())
             buildBtn.isEnabled = true
+            autoFetchCover(bytes, info)
         }
     }
 
@@ -147,13 +172,11 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        val art = iconCrop.export(512) ?: IconMaker.placeholder(label, info.system)
         setBusy(true, "Building $label…")
         lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
-                runCatching {
-                    val art = icon ?: IconMaker.placeholder(label, info.system)
-                    buildApk(rom, info, label, pkg, art)
-                }
+                runCatching { buildApk(rom, info, label, pkg, art) }
             }
             result.onSuccess { apk ->
                 builtApk = apk
@@ -239,6 +262,73 @@ class MainActivity : ComponentActivity() {
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         }
+
+    private fun slider(id: Int, apply: (Int) -> Unit) {
+        findViewById<SeekBar>(id).setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, value: Int, fromUser: Boolean) = apply(value)
+            override fun onStartTrackingTouch(bar: SeekBar) = Unit
+            override fun onStopTrackingTouch(bar: SeekBar) = Unit
+        })
+    }
+
+    private fun setIconSource(bitmap: Bitmap) {
+        iconSource = bitmap
+        iconCrop.setBitmap(bitmap)
+    }
+
+    /** Silently tries the ROM's own checksum, which works for all three systems. */
+    private fun autoFetchCover(rom: ByteArray, info: RomInfo) {
+        lifecycleScope.launch {
+            val art = withContext(Dispatchers.IO) {
+                runCatching {
+                    val match = CoverArt.byChecksum(this@MainActivity, info.system, rom)
+                        ?: return@runCatching null
+                    CoverArt.fetchBoxart(info.system, match.name)
+                }.getOrNull()
+            }
+            if (art != null && !userPickedIcon) {
+                setIconSource(art)
+                status.text = "Cover art found for this ROM"
+            }
+        }
+    }
+
+    private fun findCover() {
+        val info = romInfo ?: return toast("Choose a ROM first")
+        val query = gameCode.text.toString().trim()
+        if (query.isEmpty()) return toast("Enter a game code or title")
+        setBusy(true, "Looking up $query…")
+        lifecycleScope.launch {
+            val matches = withContext(Dispatchers.IO) {
+                runCatching { CoverArt.search(this@MainActivity, info.system, query) }.getOrDefault(emptyList())
+            }
+            setBusy(false, "")
+            when {
+                matches.isEmpty() -> toast("No match. Try the game's title instead.")
+                matches.size == 1 -> loadCover(info, matches.first())
+                else -> AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Which one?")
+                    .setItems(matches.map { it.name }.toTypedArray()) { _, i -> loadCover(info, matches[i]) }
+                    .show()
+            }
+        }
+    }
+
+    private fun loadCover(info: RomInfo, match: CoverArt.Match) {
+        setBusy(true, "Downloading cover…")
+        lifecycleScope.launch {
+            val art = withContext(Dispatchers.IO) {
+                runCatching { CoverArt.fetchBoxart(info.system, match.name) }.getOrNull()
+            }
+            if (art == null) {
+                setBusy(false, "No box art published for ${match.name}")
+            } else {
+                userPickedIcon = true
+                setIconSource(art)
+                setBusy(false, match.name)
+            }
+        }
+    }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
 }

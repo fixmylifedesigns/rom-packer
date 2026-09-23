@@ -1,19 +1,26 @@
 package com.fixmylife.romplayer
 
+import android.app.AlertDialog
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.RectF
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Gravity
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -23,9 +30,11 @@ import com.swordfish.libretrodroid.GLRetroViewData
 import com.swordfish.libretrodroid.ShaderConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import kotlin.coroutines.resume
 import kotlin.math.abs
 
 class GameActivity : ComponentActivity() {
@@ -34,8 +43,55 @@ class GameActivity : ComponentActivity() {
     private var gameReady = false
     private var lastPhysicalDpad = 0 to 0
 
-    private val sramFile by lazy { File(filesDir, "game.srm") }
-    private val stateFile by lazy { File(filesDir, "quick.state") }
+    private val saves by lazy { SaveManager(this) }
+    private val quickStateFile by lazy { File(filesDir, "quick.state") }
+    private var gameTitle = "game"
+    private var pendingExportSlot: SaveManager.Slot? = null
+    private lateinit var menu: GameMenu
+
+    // ---- storage access framework plumbing ----
+
+    private val importBatteryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        val bytes = readUri(uri) ?: return@registerForActivityResult toast("Couldn't read that file")
+        if (bytes.isEmpty()) return@registerForActivityResult toast("That file is empty")
+        // Battery saves are applied at load time, so restart the emulator with it in place.
+        if (saves.writeAtomic(saves.batteryFile, bytes)) {
+            toast("Battery save imported, restarting")
+            recreate()
+        } else {
+            toast("Import failed")
+        }
+    }
+
+    private val exportBatteryLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
+        uri ?: return@registerForActivityResult
+        val view = retroView
+        val bytes = if (view != null && gameReady) {
+            runCatching { view.serializeSRAM() }.getOrNull() ?: saves.readBattery()
+        } else {
+            saves.readBattery()
+        }
+        if (bytes == null || bytes.isEmpty()) return@registerForActivityResult toast("This game has no battery save")
+        toast(if (writeUri(uri, bytes)) "Exported" else "Export failed")
+    }
+
+    private val importStateLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        val bytes = readUri(uri) ?: return@registerForActivityResult toast("Couldn't read that file")
+        val view = retroView ?: return@registerForActivityResult
+        val ok = runCatching { view.unserializeState(bytes) }.getOrDefault(false)
+        toast(if (ok) "State loaded" else "That state isn't for this game")
+    }
+
+    private val exportStateLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
+        val slot = pendingExportSlot
+        pendingExportSlot = null
+        uri ?: return@registerForActivityResult
+        val bytes = slot?.file?.takeIf { it.isFile }?.readBytes()
+            ?: return@registerForActivityResult toast("That slot is empty")
+        toast(if (writeUri(uri, bytes)) "Exported" else "Export failed")
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,13 +111,14 @@ class GameActivity : ComponentActivity() {
             return
         }
         val isGba = config.optString("system") == "gba"
+        gameTitle = config.optString("title").ifBlank { "game" }
 
         val data = GLRetroViewData(this).apply {
             coreFilePath = "libmgba_libretro_android.so"
             gameFilePath = romFile.absolutePath
             systemDirectory = filesDir.absolutePath
             savesDirectory = filesDir.absolutePath
-            saveRAMState = sramFile.takeIf { it.isFile }?.readBytes()
+            saveRAMState = saves.readBattery()
             shader = ShaderConfig.Sharp
             rumbleEventsEnabled = false
             preferLowLatencyAudio = true
@@ -80,7 +137,10 @@ class GameActivity : ComponentActivity() {
             }
             override fun onQuickSave() = quickSave()
             override fun onQuickLoad() = quickLoad()
+            override fun onMenu() = menu.show()
         })
+
+        menu = GameMenu(this, saves, menuActions)
 
         val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         root.addView(view, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -92,6 +152,7 @@ class GameActivity : ComponentActivity() {
                 if (event is GLRetroView.GLRetroEvents.FrameRendered && !gameReady) {
                     gameReady = true
                     view.viewport = viewportFor(resources.configuration)
+                    offerAutoResume()
                 }
             }
         }
@@ -128,39 +189,139 @@ class GameActivity : ComponentActivity() {
         if (!gameReady) return
         runCatching {
             val sram = view.serializeSRAM(false)
-            if (sram.isNotEmpty()) {
-                val tmp = File(filesDir, "game.srm.part")
-                tmp.writeBytes(sram)
-                tmp.renameTo(sramFile)
-            }
+            if (sram.isNotEmpty()) saves.writeAtomic(saves.batteryFile, sram)
         }.onFailure { Log.w(TAG, "SRAM save failed", it) }
+        runCatching {
+            val state = view.serializeState(false)
+            if (state.isNotEmpty()) saves.writeAtomic(saves.autoStateFile, state)
+        }.onFailure { Log.w(TAG, "Auto state save failed", it) }
     }
 
     private fun quickSave() {
         val view = retroView ?: return
         if (!gameReady) return
         lifecycleScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { stateFile.writeBytes(view.serializeState()) }.isSuccess
-            }
-            toast(if (ok) "State saved" else "Save failed")
+            val bytes = runCatching { view.serializeState() }.getOrNull()
+            val ok = bytes != null && withContext(Dispatchers.IO) { saves.writeAtomic(quickStateFile, bytes) }
+            toast(if (ok) "Quick state saved" else "Save failed")
         }
     }
 
     private fun quickLoad() {
         val view = retroView ?: return
         if (!gameReady) return
-        if (!stateFile.isFile) {
-            toast("No saved state yet")
+        if (!quickStateFile.isFile) {
+            toast("No quick state yet \u2014 tap SAVE first")
             return
         }
         lifecycleScope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching { view.unserializeState(stateFile.readBytes()) }.getOrDefault(false)
-            }
-            toast(if (ok) "State loaded" else "Load failed")
+            val bytes = withContext(Dispatchers.IO) { runCatching { quickStateFile.readBytes() }.getOrNull() }
+            val ok = bytes != null && runCatching { view.unserializeState(bytes) }.getOrDefault(false)
+            toast(if (ok) "Quick state loaded" else "Load failed")
         }
     }
+
+    // ---- menu actions ----
+
+    private val menuActions = object : GameMenu.Actions {
+        override fun saveToSlot(slot: SaveManager.Slot) {
+            val view = retroView ?: return
+            if (!gameReady) return
+            lifecycleScope.launch {
+                val bytes = runCatching { view.serializeState() }.getOrNull()
+                if (bytes == null) return@launch toast("Save failed")
+                val thumb = captureThumbnail(view)
+                val ok = withContext(Dispatchers.IO) {
+                    val wrote = saves.writeAtomic(slot.file, bytes)
+                    if (wrote && thumb != null) {
+                        runCatching {
+                            slot.thumb.outputStream().use { thumb.compress(Bitmap.CompressFormat.PNG, 90, it) }
+                        }
+                    }
+                    wrote
+                }
+                toast(if (ok) "Saved to slot ${slot.index}" else "Save failed")
+            }
+        }
+
+        override fun loadFromSlot(slot: SaveManager.Slot) {
+            val view = retroView ?: return
+            lifecycleScope.launch {
+                val bytes = withContext(Dispatchers.IO) { runCatching { slot.file.readBytes() }.getOrNull() }
+                val ok = bytes != null && runCatching { view.unserializeState(bytes) }.getOrDefault(false)
+                toast(if (ok) "Loaded slot ${slot.index}" else "Load failed")
+            }
+        }
+
+        override fun importBatterySave() = importBatteryLauncher.launch(arrayOf("*/*"))
+
+        override fun exportBatterySave() = exportBatteryLauncher.launch(saves.exportName(gameTitle, "sav"))
+
+        override fun importState() = importStateLauncher.launch(arrayOf("*/*"))
+
+        override fun exportState(slot: SaveManager.Slot) {
+            pendingExportSlot = slot
+            exportStateLauncher.launch(saves.exportName("$gameTitle slot ${slot.index}", "state"))
+        }
+
+        override fun resetGame() {
+            retroView?.reset()
+        }
+
+        override fun setFastForward(speed: Int) {
+            retroView?.frameSpeed = speed
+            toast(if (speed == 1) "Normal speed" else "Fast-forward ${speed}x")
+        }
+
+        override fun setShader(index: Int) {
+            retroView?.shader = when (index) {
+                1 -> ShaderConfig.Default
+                2 -> ShaderConfig.LCD
+                3 -> ShaderConfig.CRT
+                else -> ShaderConfig.Sharp
+            }
+            toast("Filter: ${GameMenu.SHADERS[index]}")
+        }
+
+        override fun setMuted(muted: Boolean) {
+            retroView?.audioEnabled = !muted
+        }
+    }
+
+    /** Grabs the current frame for a slot thumbnail. Returns null if the copy fails. */
+    private suspend fun captureThumbnail(view: GLRetroView): Bitmap? =
+        suspendCancellableCoroutine { cont ->
+            runCatching {
+                val width = 256
+                val height = (width * view.height / view.width.coerceAtLeast(1)).coerceAtLeast(1)
+                val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                PixelCopy.request(view, bitmap, { result ->
+                    cont.resume(if (result == PixelCopy.SUCCESS) bitmap else null)
+                }, Handler(Looper.getMainLooper()))
+            }.onFailure { cont.resume(null) }
+        }
+
+    /** Offers the state written when the game was last closed. */
+    private fun offerAutoResume() {
+        val view = retroView ?: return
+        val auto = saves.autoStateFile
+        if (!auto.isFile || auto.length() == 0L) return
+        AlertDialog.Builder(this)
+            .setTitle("Resume?")
+            .setMessage("Pick up exactly where you left off, or start from the game's own save.")
+            .setPositiveButton("Resume") { _, _ ->
+                val ok = runCatching { view.unserializeState(auto.readBytes()) }.getOrDefault(false)
+                if (!ok) toast("Couldn't resume")
+            }
+            .setNegativeButton("Start fresh", null)
+            .show()
+    }
+
+    private fun readUri(uri: Uri): ByteArray? =
+        runCatching { contentResolver.openInputStream(uri)!!.use { it.readBytes() } }.getOrNull()
+
+    private fun writeUri(uri: Uri, bytes: ByteArray): Boolean =
+        runCatching { contentResolver.openOutputStream(uri)!!.use { it.write(bytes) } }.isSuccess
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -241,7 +402,7 @@ class GameActivity : ComponentActivity() {
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 
         /**
-         * Physical controller → what we send to the core. Android's A/B (Xbox layout)
+         * Physical controller \u2192 what we send to the core. Android's A/B (Xbox layout)
          * are swapped relative to RetroPad, same as LibretroDroid does internally:
          * bottom face button = GB "B", right face button = GB "A".
          */

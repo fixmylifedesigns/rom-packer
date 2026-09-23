@@ -14,10 +14,65 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                Opening a ROM from a file manager or the Downloads list.
+
+                Two filters are needed because the two cases look different to
+                Android. A file:// URI (and some content:// ones) carries the
+                name, so the extension patterns match. A download usually
+                arrives as content:// with no usable path, carrying only the
+                server's MIME type, which is almost always octet-stream.
+            -->
+            <intent-filter android:label="Pack as an app">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="*/*" />
+                <!-- Android matches the whole path, so each dot before the
+                     extension needs its own variant. -->
+                <data android:pathPattern=".*\\.gb" />
+                <data android:pathPattern=".*\\..*\\.gb" />
+                <data android:pathPattern=".*\\..*\\..*\\.gb" />
+                <data android:pathPattern=".*\\.gbc" />
+                <data android:pathPattern=".*\\..*\\.gbc" />
+                <data android:pathPattern=".*\\..*\\..*\\.gbc" />
+                <data android:pathPattern=".*\\.gba" />
+                <data android:pathPattern=".*\\..*\\.gba" />
+                <data android:pathPattern=".*\\..*\\..*\\.gba" />
+                <data android:pathPattern=".*\\.GB" />
+                <data android:pathPattern=".*\\.GBC" />
+                <data android:pathPattern=".*\\.GBA" />
+            </intent-filter>
+
+            <intent-filter android:label="Pack as an app">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-gameboy-rom" />
+                <data android:mimeType="application/x-gameboy-color-rom" />
+                <data android:mimeType="application/x-gba-rom" />
+            </intent-filter>
+
+            <!-- Share sheet: works from apps that don't offer "Open with". -->
+            <intent-filter android:label="Pack as an app">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-gameboy-rom" />
+                <data android:mimeType="application/x-gba-rom" />
             </intent-filter>
         </activity>
 

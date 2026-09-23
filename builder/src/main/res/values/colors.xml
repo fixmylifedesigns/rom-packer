@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Palette from the redesign concept: charcoal surfaces, violet accent. -->
+    <color name="bg">#0F0D13</color>
+    <color name="surface">#1B1822</color>
+    <color name="surface_high">#241F2E</color>
+    <color name="accent">#8B5CF6</color>
+    <color name="accent_dim">#5B3BA8</color>
+    <color name="text_primary">#F2EFF7</color>
+    <color name="text_muted">#9B94A8</color>
+    <color name="outline">#332C40</color>
+</resources>

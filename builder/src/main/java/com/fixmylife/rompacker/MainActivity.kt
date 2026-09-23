@@ -151,14 +151,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /** A ROM opened from a file manager, the Downloads list, or the share sheet. */
-    private fun handleIncoming(intent: Intent?) {
-        val uri = when (intent?.action) {
-            Intent.ACTION_VIEW -> intent.data
-            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+    private fun handleIncoming(incoming: Intent?) {
+        val source = incoming ?: return
+        val uri = when (source.action) {
+            Intent.ACTION_VIEW -> source.data
+            Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(source, Intent.EXTRA_STREAM, Uri::class.java)
             else -> null
         } ?: return
         // Clear it so a later recreate doesn't reload the same file over the user's work.
-        intent.action = null
+        source.action = null
         loadRom(uri)
     }
 

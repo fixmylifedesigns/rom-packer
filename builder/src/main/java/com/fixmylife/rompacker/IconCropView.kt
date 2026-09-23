@@ -32,16 +32,15 @@ class IconCropView @JvmOverloads constructor(
     // Named xform, not matrix: View already has getMatrix() and the JVM signatures would clash.
     private val xform = Matrix()
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val frame = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+
+    // Violet corner brackets, as in the design concept.
+    private val bracket = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
-        strokeWidth = 2f
-        color = Color.argb(160, 255, 255, 255)
+        strokeWidth = 5f
+        strokeCap = Paint.Cap.SQUARE
+        color = Color.rgb(139, 92, 246)
     }
-    private val grid = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE
-        strokeWidth = 1f
-        color = Color.argb(60, 255, 255, 255)
-    }
+    private val empty = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(30, 128, 128, 128) }
 
     var brightness = 0f
         set(value) { field = value; applyFilter() }
@@ -180,17 +179,22 @@ class IconCropView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val src = source
         if (src == null) {
-            canvas.drawColor(Color.argb(30, 128, 128, 128))
+            canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), empty)
         } else {
             canvas.drawBitmap(src, xform, paint)
         }
         val w = width.toFloat()
         val h = height.toFloat()
-        canvas.drawRect(1f, 1f, w - 1f, h - 1f, frame)
-        for (i in 1..2) {
-            canvas.drawLine(w * i / 3f, 0f, w * i / 3f, h, grid)
-            canvas.drawLine(0f, h * i / 3f, w, h * i / 3f, grid)
-        }
+        val arm = min(w, h) * 0.11f
+        val inset = 3f
+        canvas.drawLine(inset, inset, inset + arm, inset, bracket)
+        canvas.drawLine(inset, inset, inset, inset + arm, bracket)
+        canvas.drawLine(w - inset - arm, inset, w - inset, inset, bracket)
+        canvas.drawLine(w - inset, inset, w - inset, inset + arm, bracket)
+        canvas.drawLine(inset, h - inset, inset + arm, h - inset, bracket)
+        canvas.drawLine(inset, h - inset - arm, inset, h - inset, bracket)
+        canvas.drawLine(w - inset - arm, h - inset, w - inset, h - inset, bracket)
+        canvas.drawLine(w - inset, h - inset - arm, w - inset, h - inset, bracket)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {

@@ -1,0 +1,10 @@
+# Netlify picks this up from the repo root; the site itself lives in website/.
+[build]
+  base = "website"
+  command = "npm run build"
+  publish = "out"
+
+[build.environment]
+  NODE_VERSION = "22"
+  # Set NEXT_PUBLIC_SITE_URL in the Netlify UI to the real domain so the
+  # sitemap, robots.txt and Open Graph tags point at it.

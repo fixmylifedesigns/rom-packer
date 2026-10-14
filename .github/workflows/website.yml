@@ -1,0 +1,36 @@
+name: Build website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/website.yml"
+  pull_request:
+    paths:
+      - "website/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+
+      - run: npm run build
+
+      - name: Check the exported pages exist
+        run: |
+          test -f out/index.html
+          test -f out/privacy.html
+          test -f out/sitemap.xml
+          test -f out/robots.txt

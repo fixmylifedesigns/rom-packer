@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.OpenableColumns
 import android.util.Log
 import android.view.Gravity
 import android.view.InputDevice
@@ -34,6 +35,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.zip.CRC32
 import kotlin.coroutines.resume
 import kotlin.math.abs
 
@@ -47,21 +49,14 @@ class GameActivity : ComponentActivity() {
     private val quickStateFile by lazy { File(filesDir, "quick.state") }
     private var gameTitle = "game"
     private var pendingExportSlot: SaveManager.Slot? = null
+    private var suppressAutoSave = false
     private lateinit var menu: GameMenu
 
     // ---- storage access framework plumbing ----
 
     private val importBatteryLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        val bytes = readUri(uri) ?: return@registerForActivityResult toast("Couldn't read that file")
-        if (bytes.isEmpty()) return@registerForActivityResult toast("That file is empty")
-        // Battery saves are applied at load time, so restart the emulator with it in place.
-        if (saves.writeAtomic(saves.batteryFile, bytes)) {
-            toast("Battery save imported, restarting")
-            recreate()
-        } else {
-            toast("Import failed")
-        }
+        importBattery(uri)
     }
 
     private val exportBatteryLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
@@ -187,6 +182,12 @@ class GameActivity : ComponentActivity() {
         // so read SRAM directly instead of queueing onto the GL thread.
         val view = retroView ?: return
         if (!gameReady) return
+        if (suppressAutoSave) {
+            // An import just replaced the battery save on disk; writing the core's
+            // old SRAM back over it here is exactly what used to lose the import.
+            Log.i(TAG, "Skipping auto-save: battery import in progress")
+            return
+        }
         runCatching {
             val sram = view.serializeSRAM(false)
             if (sram.isNotEmpty()) saves.writeAtomic(saves.batteryFile, sram)
@@ -287,6 +288,83 @@ class GameActivity : ComponentActivity() {
             retroView?.audioEnabled = !muted
         }
     }
+
+    /**
+     * Installs an external battery save.
+     *
+     * The save is pushed straight into the running core's SRAM and the game is
+     * then soft-reset, so the core itself holds the imported data. Writing the
+     * file and restarting the activity (what this used to do) loses the import:
+     * the restart runs onPause first, which dumps the core's *old* SRAM back
+     * over the file that was just written.
+     */
+    private fun importBattery(uri: Uri) {
+        val name = displayName(uri)
+        val bytes = readUri(uri) ?: return toast("Couldn't read that file")
+        Log.i(TAG, "Importing battery save: ${bytes.size} bytes, crc=${crc(bytes)}")
+
+        saves.validateImport(bytes, name)?.let { return toast(it) }
+
+        val view = retroView
+        val current = if (view != null && gameReady) runCatching { view.serializeSRAM() }.getOrNull() else null
+
+        if (view == null || current == null || current.isEmpty()) {
+            // No live SRAM to push into: replace the file and restart instead,
+            // with the auto-save guard on so the restart can't undo it.
+            Log.i(TAG, "No live SRAM; importing via restart")
+            if (!saves.writeAtomic(saves.batteryFile, bytes)) return toast("Import failed")
+            saves.clearAutoState()
+            suppressAutoSave = true
+            toast("Battery save imported, restarting")
+            recreate()
+            return
+        }
+
+        if (!saves.backupBattery(current)) return toast("Couldn't back up the current save, nothing changed")
+
+        // Match the core's SRAM size exactly: pad short files, drop any trailing
+        // RTC footer on long ones, so no stale bytes survive underneath.
+        val payload = ByteArray(current.size) { 0xFF.toByte() }
+        bytes.copyInto(payload, 0, 0, minOf(bytes.size, current.size))
+        if (bytes.size != current.size) {
+            Log.i(TAG, "Resized import ${bytes.size} -> ${current.size} bytes")
+        }
+
+        val applied = runCatching { view.unserializeSRAM(payload) }.getOrDefault(false)
+        if (!applied) {
+            saves.restoreBackup()
+            return toast("That save doesn't fit this game")
+        }
+
+        if (!saves.writeAtomic(saves.batteryFile, payload)) {
+            saves.restoreBackup()
+            runCatching { view.unserializeSRAM(current) }
+            return toast("Couldn't write the save, previous one restored")
+        }
+
+        val written = saves.readBattery()
+        if (written == null || !written.contentEquals(payload)) {
+            saves.restoreBackup()
+            runCatching { view.unserializeSRAM(current) }
+            return toast("Save file verification failed, previous one restored")
+        }
+        Log.i(TAG, "Battery save installed: ${payload.size} bytes, crc=${crc(payload)}")
+
+        // The pre-import snapshot would put the old progress straight back.
+        saves.clearAutoState()
+        view.reset()
+        toast("Battery save imported. Choose Continue to load it.")
+    }
+
+    private fun displayName(uri: Uri): String? =
+        runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull()
+
+    private fun crc(bytes: ByteArray): String =
+        CRC32().apply { update(bytes) }.value.toString(16).uppercase()
 
     /** Grabs the current frame for a slot thumbnail. Returns null if the copy fails. */
     private suspend fun captureThumbnail(view: GLRetroView): Bitmap? =

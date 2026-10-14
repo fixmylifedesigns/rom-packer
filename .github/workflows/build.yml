@@ -3,6 +3,11 @@ name: Build APK
 on:
   push:
     branches: [main]
+    # Website-only edits don't need a 5-minute Android build.
+    paths-ignore:
+      - "website/**"
+      - "docs/**"
+      - "**.md"
   workflow_dispatch:
 
 permissions:

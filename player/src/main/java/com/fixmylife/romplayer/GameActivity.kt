@@ -1,6 +1,7 @@
 package com.fixmylife.romplayer
 
 import android.app.AlertDialog
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -47,6 +48,7 @@ class GameActivity : ComponentActivity() {
 
     private val saves by lazy { SaveManager(this) }
     private val quickStateFile by lazy { File(filesDir, "quick.state") }
+    private val prefs by lazy { getSharedPreferences("player", MODE_PRIVATE) }
     private var gameTitle = "game"
     private var pendingExportSlot: SaveManager.Slot? = null
     private var suppressAutoSave = false
@@ -119,6 +121,8 @@ class GameActivity : ComponentActivity() {
             preferLowLatencyAudio = true
         }
 
+        applyRotation(currentRotation())
+
         val view = GLRetroView(this, data)
         retroView = view
         lifecycle.addObserver(view)
@@ -130,8 +134,6 @@ class GameActivity : ComponentActivity() {
             override fun onDpad(x: Int, y: Int) {
                 view.sendMotionEvent(GLRetroView.MOTION_SOURCE_DPAD, x.toFloat(), y.toFloat())
             }
-            override fun onQuickSave() = quickSave()
-            override fun onQuickLoad() = quickLoad()
             override fun onMenu() = menu.show()
         })
 
@@ -212,7 +214,7 @@ class GameActivity : ComponentActivity() {
         val view = retroView ?: return
         if (!gameReady) return
         if (!quickStateFile.isFile) {
-            toast("No quick state yet \u2014 tap SAVE first")
+            toast("No quick state yet \u2014 use Quick save first")
             return
         }
         lifecycleScope.launch {
@@ -225,6 +227,19 @@ class GameActivity : ComponentActivity() {
     // ---- menu actions ----
 
     private val menuActions = object : GameMenu.Actions {
+        override fun quickSave() = this@GameActivity.quickSave()
+
+        override fun quickLoad() = this@GameActivity.quickLoad()
+
+        override fun currentRotation() = this@GameActivity.currentRotation()
+
+        override fun setRotation(mode: Int) {
+            prefs.edit().putInt(PREF_ROTATION, mode).apply()
+            applyRotation(mode)
+        }
+
+        override fun checkForUpdate() = this@GameActivity.checkForUpdate()
+
         override fun saveToSlot(slot: SaveManager.Slot) {
             val view = retroView ?: return
             if (!gameReady) return
@@ -286,6 +301,53 @@ class GameActivity : ComponentActivity() {
 
         override fun setMuted(muted: Boolean) {
             retroView?.audioEnabled = !muted
+        }
+    }
+
+    private fun currentRotation() = prefs.getInt(PREF_ROTATION, 0)
+
+    private fun applyRotation(mode: Int) {
+        requestedOrientation = when (mode) {
+            1 -> ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT
+            2 -> ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE
+            else -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+        }
+    }
+
+    /**
+     * A game can't replace itself, so this checks whether the player it was built
+     * from is stale and hands over to ROM Packer, which rebuilds it in place.
+     */
+    private fun checkForUpdate() {
+        val installed = PlayerUpdate.installedVersion(this)
+        toast("Checking\u2026")
+        lifecycleScope.launch {
+            val latest = withContext(Dispatchers.IO) { PlayerUpdate.latestBuild() }
+            when {
+                latest == null -> toast("Couldn't reach GitHub")
+                latest <= installed -> toast("Up to date (build $installed)")
+                !PlayerUpdate.isPackerInstalled(this@GameActivity) ->
+                    AlertDialog.Builder(this@GameActivity)
+                        .setTitle("Update available")
+                        .setMessage(
+                            "This game runs player build $installed; build $latest is out. " +
+                                "Install ROM Packer and use \"Installed games\" to rebuild it."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                else -> AlertDialog.Builder(this@GameActivity)
+                    .setTitle("Update available")
+                    .setMessage(
+                        "This game runs player build $installed; build $latest is out.\n\n" +
+                            "ROM Packer can rebuild it with the newer player. Your saves are kept."
+                    )
+                    .setPositiveButton("Open ROM Packer") { _, _ ->
+                        val launch = packageManager.getLaunchIntentForPackage(PlayerUpdate.PACKER_PACKAGE)
+                        if (launch == null) toast("Couldn't open ROM Packer") else startActivity(launch)
+                    }
+                    .setNegativeButton("Later", null)
+                    .show()
+            }
         }
     }
 
@@ -477,6 +539,7 @@ class GameActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "RomPlayer"
+        private const val PREF_ROTATION = "rotation"
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 
         /**

@@ -124,7 +124,8 @@ class VirtualPad(
             place(KeyEvent.KEYCODE_BUTTON_START, w * 0.65f, h * 0.905f, w * 0.24f, w * 0.095f)
             place(KeyEvent.KEYCODE_BUTTON_L1, w * 0.14f, h * 0.575f, w * 0.20f, w * 0.09f)
             place(KeyEvent.KEYCODE_BUTTON_R1, w * 0.86f, h * 0.575f, w * 0.20f, w * 0.09f)
-            place(KEY_MENU, w * 0.88f, h * 0.345f, w * 0.13f, w * 0.11f)
+            // Centred between L and R, below the screen rather than on top of it.
+            place(KEY_MENU, w * 0.50f, h * 0.575f, w * 0.14f, w * 0.105f)
         }
         buildDpadPath()
     }

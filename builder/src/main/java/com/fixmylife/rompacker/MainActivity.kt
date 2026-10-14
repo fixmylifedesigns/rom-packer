@@ -110,6 +110,7 @@ class MainActivity : ComponentActivity() {
             iconCrop.setBitmap(iconSource)
         }
         findViewById<Button>(R.id.findCover).setOnClickListener { findCover() }
+        findViewById<Button>(R.id.installedGames).setOnClickListener { showInstalledGames() }
         findViewById<TextView>(R.id.version).text = "build ${Updater.installedVersion(this)}"
         findViewById<Button>(R.id.checkUpdate).setOnClickListener { checkForUpdate(manual = true) }
 
@@ -161,6 +162,60 @@ class MainActivity : ComponentActivity() {
         // Clear it so a later recreate doesn't reload the same file over the user's work.
         source.action = null
         loadRom(uri)
+    }
+
+    /**
+     * Games are built on the bundled player, so a newer ROM Packer means a newer
+     * player. This rebuilds an already-installed game on the current one: same
+     * package id and signing key, so Android treats it as an update and the
+     * game's saves stay where they are.
+     */
+    private fun showInstalledGames() {
+        val current = Updater.installedVersion(this)
+        lifecycleScope.launch {
+            val games = withContext(Dispatchers.IO) {
+                runCatching { InstalledGames.list(this@MainActivity) }.getOrDefault(emptyList())
+            }
+            if (games.isEmpty()) {
+                toast("No games built by ROM Packer are installed")
+                return@launch
+            }
+            val labels = games.map { game ->
+                val state = if (game.playerBuild >= current) {
+                    "up to date"
+                } else {
+                    "build ${game.playerBuild} \u2192 $current"
+                }
+                "${game.title}\n$state"
+            }
+            AlertDialog.Builder(this@MainActivity)
+                .setTitle("Installed games")
+                .setItems(labels.toTypedArray()) { _, i -> rebuildGame(games[i]) }
+                .setNegativeButton("Close", null)
+                .show()
+        }
+    }
+
+    private fun rebuildGame(game: InstalledGames.Game) {
+        setBusy(true, "Rebuilding ${game.title}\u2026")
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    val work = File(cacheDir, "build").apply { mkdirs() }
+                    work.listFiles()?.forEach { it.delete() }
+                    InstalledGames.rebuild(this@MainActivity, game, templateApk(), work)
+                }
+            }
+            result.onSuccess { apk ->
+                builtApk = apk
+                setBusy(false, "Rebuilt ${game.title} (${apk.length() / 1024} KB)")
+                installBtn.isEnabled = true
+                saveBtn.isEnabled = true
+                launchInstaller(apk)
+            }.onFailure { e ->
+                setBusy(false, "Rebuild failed: ${e.javaClass.simpleName}: ${e.message}")
+            }
+        }
     }
 
     /** Compares the installed build number against the newest GitHub release. */
@@ -288,6 +343,8 @@ class MainActivity : ComponentActivity() {
             extraFiles = mapOf(
                 "assets/game.json" to gameJson.toByteArray(),
                 "assets/$romName" to rom,
+                // Kept so "Installed games" can rebuild this later without the original file.
+                "assets/icon.png" to InstalledGames.encodePng(art),
             ),
         ) { layer, px -> IconMaker.render(art, layer, px) }
 

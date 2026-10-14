@@ -131,6 +131,13 @@
                 android:text="Choose" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/installedGames"
+            style="@style/OutlineButton"
+            android:layout_width="match_parent"
+            android:layout_marginBottom="18dp"
+            android:text="Installed games \u00b7 rebuild on the latest player" />
+
         <com.fixmylife.rompacker.IconCropView
             android:id="@+id/iconCrop"
             android:layout_width="match_parent"

@@ -13,8 +13,8 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 /**
- * The in-game menu. Kept deliberately shallow: one list of actions, with the
- * slot picker as the only screen below it.
+ * The in-game menu, behind the single hamburger button. One list of actions,
+ * with the slot picker as the only screen below it.
  */
 class GameMenu(
     private val context: Context,
@@ -23,6 +23,8 @@ class GameMenu(
 ) {
 
     interface Actions {
+        fun quickSave()
+        fun quickLoad()
         fun saveToSlot(slot: SaveManager.Slot)
         fun loadFromSlot(slot: SaveManager.Slot)
         fun importBatterySave()
@@ -33,6 +35,9 @@ class GameMenu(
         fun setFastForward(speed: Int)
         fun setShader(index: Int)
         fun setMuted(muted: Boolean)
+        fun setRotation(mode: Int)
+        fun currentRotation(): Int
+        fun checkForUpdate()
     }
 
     private var fastForward = 1
@@ -41,6 +46,8 @@ class GameMenu(
 
     fun show() {
         val items = listOf(
+            "Quick save",
+            "Quick load",
             "Save state to a slot",
             "Load state from a slot",
             "Export a save state",
@@ -49,29 +56,46 @@ class GameMenu(
             "Export battery save (.sav)",
             "Speed: ${speedLabel()}",
             "Filter: ${SHADERS[shaderIndex]}",
+            "Rotation: ${ROTATIONS[actions.currentRotation()]}",
             if (muted) "Sound: off" else "Sound: on",
+            "Check for updates",
             "Reset game",
         )
         AlertDialog.Builder(context)
             .setTitle("Menu")
             .setItems(items.toTypedArray()) { _, which ->
                 when (which) {
-                    0 -> pickSlot("Save to which slot?", allowEmpty = true) { actions.saveToSlot(it) }
-                    1 -> pickSlot("Load which slot?", allowEmpty = false) { actions.loadFromSlot(it) }
-                    2 -> pickSlot("Export which slot?", allowEmpty = false) { actions.exportState(it) }
-                    3 -> actions.importState()
-                    4 -> actions.importBatterySave()
-                    5 -> actions.exportBatterySave()
-                    6 -> cycleSpeed()
-                    7 -> cycleShader()
-                    8 -> {
+                    0 -> actions.quickSave()
+                    1 -> actions.quickLoad()
+                    2 -> pickSlot("Save to which slot?", allowEmpty = true) { actions.saveToSlot(it) }
+                    3 -> pickSlot("Load which slot?", allowEmpty = false) { actions.loadFromSlot(it) }
+                    4 -> pickSlot("Export which slot?", allowEmpty = false) { actions.exportState(it) }
+                    5 -> actions.importState()
+                    6 -> actions.importBatterySave()
+                    7 -> actions.exportBatterySave()
+                    8 -> cycleSpeed()
+                    9 -> cycleShader()
+                    10 -> pickRotation()
+                    11 -> {
                         muted = !muted
                         actions.setMuted(muted)
                     }
-                    9 -> confirmReset()
+                    12 -> actions.checkForUpdate()
+                    13 -> confirmReset()
                 }
             }
             .setNegativeButton("Close", null)
+            .show()
+    }
+
+    private fun pickRotation() {
+        AlertDialog.Builder(context)
+            .setTitle("Rotation")
+            .setSingleChoiceItems(ROTATIONS, actions.currentRotation()) { dialog, which ->
+                actions.setRotation(which)
+                dialog.dismiss()
+            }
+            .setNegativeButton("Cancel", null)
             .show()
     }
 
@@ -106,7 +130,7 @@ class GameMenu(
         if (slots.isEmpty()) {
             AlertDialog.Builder(context)
                 .setTitle("No save states yet")
-                .setMessage("Use SAVE, or \"Save state to a slot\", first.")
+                .setMessage("Use Quick save, or \"Save state to a slot\", first.")
                 .setPositiveButton("OK", null)
                 .show()
             return
@@ -159,5 +183,8 @@ class GameMenu(
 
     companion object {
         val SHADERS = arrayOf("Sharp", "Smooth", "LCD", "CRT")
+
+        /** Index order matches GameActivity's rotation handling. */
+        val ROTATIONS = arrayOf("Auto", "Portrait", "Landscape")
     }
 }

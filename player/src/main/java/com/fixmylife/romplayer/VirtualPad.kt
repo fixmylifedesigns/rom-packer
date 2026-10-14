@@ -15,15 +15,12 @@ import kotlin.math.abs
 import kotlin.math.hypot
 
 /**
- * Transparent control overlay.
+ * Transparent control overlay: D-pad, face buttons, Start/Select, L/R on GBA,
+ * and one hamburger button that opens the menu. Everything else lives in there.
  *
  * The D-pad is one filled plus shape (two rounded bars unioned into a single
- * path) rather than four overlapping rectangles, so the arms no longer stack
- * their translucency into bright squares at the centre. The pressed direction
- * is drawn as a highlight clipped to that shape.
- *
- * Every touch event recomputes the pressed set from all active pointers, so
- * sliding a thumb from B onto A works, and so does rolling around the D-pad.
+ * path) rather than four overlapping rectangles, so the arms don't stack their
+ * translucency into bright squares at the centre.
  */
 @SuppressLint("ViewConstructor")
 class VirtualPad(
@@ -35,8 +32,6 @@ class VirtualPad(
     interface Listener {
         fun onButton(keyCode: Int, pressed: Boolean)
         fun onDpad(x: Int, y: Int)
-        fun onQuickSave()
-        fun onQuickLoad()
         fun onMenu()
     }
 
@@ -59,9 +54,7 @@ class VirtualPad(
             add(Btn(KeyEvent.KEYCODE_BUTTON_L1, "L", false))
             add(Btn(KeyEvent.KEYCODE_BUTTON_R1, "R", false))
         }
-        add(Btn(KEY_SAVE, "SAVE", false))
-        add(Btn(KEY_LOAD, "LOAD", false))
-        add(Btn(KEY_MENU, "MENU", false))
+        add(Btn(KEY_MENU, "", false))
     }
 
     private var dpadCx = 0f
@@ -81,7 +74,24 @@ class VirtualPad(
         strokeWidth = 2f
         color = Color.argb(70, 255, 255, 255)
     }
-    private val pivot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(55, 255, 255, 255) }
+    private val pivot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(90, 255, 255, 255) }
+
+    // A wide, faint second stroke fakes the soft outer glow in the concept.
+    private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 10f
+        color = Color.argb(40, 190, 165, 255)
+    }
+    private val glowOn = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 14f
+        color = Color.argb(110, 167, 129, 255)
+    }
+    private val bars = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        color = Color.argb(225, 255, 255, 255)
+    }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(225, 255, 255, 255)
         textAlign = Paint.Align.CENTER
@@ -104,9 +114,7 @@ class VirtualPad(
             place(KeyEvent.KEYCODE_BUTTON_START, w * 0.58f, h * 0.92f, h * 0.20f, h * 0.085f)
             place(KeyEvent.KEYCODE_BUTTON_L1, w * 0.09f, h * 0.10f, h * 0.24f, h * 0.10f)
             place(KeyEvent.KEYCODE_BUTTON_R1, w * 0.91f, h * 0.10f, h * 0.24f, h * 0.10f)
-            place(KEY_SAVE, w * 0.40f, h * 0.08f, h * 0.15f, h * 0.075f)
-            place(KEY_LOAD, w * 0.50f, h * 0.08f, h * 0.15f, h * 0.075f)
-            place(KEY_MENU, w * 0.60f, h * 0.08f, h * 0.15f, h * 0.075f)
+            place(KEY_MENU, w * 0.50f, h * 0.08f, h * 0.11f, h * 0.085f)
         } else {
             dpadCx = w * 0.25f; dpadCy = h * 0.745f; dpadR = w * 0.20f
             val r = w * 0.095f
@@ -116,9 +124,7 @@ class VirtualPad(
             place(KeyEvent.KEYCODE_BUTTON_START, w * 0.65f, h * 0.905f, w * 0.24f, w * 0.095f)
             place(KeyEvent.KEYCODE_BUTTON_L1, w * 0.14f, h * 0.575f, w * 0.20f, w * 0.09f)
             place(KeyEvent.KEYCODE_BUTTON_R1, w * 0.86f, h * 0.575f, w * 0.20f, w * 0.09f)
-            place(KEY_SAVE, w * 0.30f, h * 0.60f, w * 0.20f, w * 0.085f)
-            place(KEY_LOAD, w * 0.50f, h * 0.60f, w * 0.20f, w * 0.085f)
-            place(KEY_MENU, w * 0.70f, h * 0.60f, w * 0.20f, w * 0.085f)
+            place(KEY_MENU, w * 0.88f, h * 0.345f, w * 0.13f, w * 0.11f)
         }
         buildDpadPath()
     }
@@ -136,6 +142,7 @@ class VirtualPad(
     }
 
     override fun onDraw(canvas: Canvas) {
+        canvas.drawPath(dpadPath, if (dir == 0 to 0) glow else glowOn)
         canvas.drawPath(dpadPath, fill)
 
         val (dx, dy) = dir
@@ -159,17 +166,37 @@ class VirtualPad(
         canvas.drawCircle(dpadCx, dpadCy, dpadR * 0.11f, pivot)
 
         buttons.forEach { b ->
-            val paint = if (b.key in pressed) fillOn else fill
+            val on = b.key in pressed
+            val paint = if (on) fillOn else fill
             if (b.round) {
+                canvas.drawOval(b.rect, if (on) glowOn else glow)
                 canvas.drawOval(b.rect, paint)
                 canvas.drawOval(b.rect, stroke)
             } else {
                 val radius = b.rect.height() / 2
+                canvas.drawRoundRect(b.rect, radius, radius, if (on) glowOn else glow)
                 canvas.drawRoundRect(b.rect, radius, radius, paint)
                 canvas.drawRoundRect(b.rect, radius, radius, stroke)
             }
-            text.textSize = if (b.round) b.rect.height() * 0.44f else b.rect.height() * 0.46f
-            canvas.drawText(b.label, b.rect.centerX(), b.rect.centerY() - (text.ascent() + text.descent()) / 2, text)
+            if (b.key == KEY_MENU) {
+                drawHamburger(canvas, b.rect)
+            } else {
+                text.textSize = if (b.round) b.rect.height() * 0.44f else b.rect.height() * 0.46f
+                canvas.drawText(b.label, b.rect.centerX(), b.rect.centerY() - (text.ascent() + text.descent()) / 2, text)
+            }
+        }
+    }
+
+    /** Three bars, centred in the button. */
+    private fun drawHamburger(canvas: Canvas, rect: RectF) {
+        val width = rect.width() * 0.44f
+        val gap = rect.height() * 0.22f
+        bars.strokeWidth = rect.height() * 0.09f
+        val cx = rect.centerX()
+        val cy = rect.centerY()
+        for (i in -1..1) {
+            val y = cy + i * gap
+            canvas.drawLine(cx - width / 2, y, cx + width / 2, y, bars)
         }
     }
 
@@ -211,8 +238,6 @@ class VirtualPad(
         (now - pressed).forEach { key ->
             performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
             when (key) {
-                KEY_SAVE -> listener.onQuickSave()
-                KEY_LOAD -> listener.onQuickLoad()
                 KEY_MENU -> listener.onMenu()
                 else -> listener.onButton(key, true)
             }
@@ -230,8 +255,6 @@ class VirtualPad(
     }
 
     companion object {
-        private const val KEY_SAVE = -1
-        private const val KEY_LOAD = -2
-        private const val KEY_MENU = -3
+        private const val KEY_MENU = -1
     }
 }

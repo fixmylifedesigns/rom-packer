@@ -47,8 +47,11 @@ android {
         applicationId = "fixmylife.rompack.template"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // Every generated game inherits this, so a game can tell which player
+        // build it was packed with and offer a rebuild when that goes stale.
+        val buildNumber = (findProperty("rompack.build") as String? ?: "1").toInt()
+        versionCode = buildNumber
+        versionName = "build-$buildNumber"
         ndk { abiFilters += coreAbis }
     }
 

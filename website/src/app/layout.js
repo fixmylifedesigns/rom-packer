@@ -19,6 +19,10 @@ export const metadata = {
     type: "website",
   },
   robots: { index: true, follow: true },
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export const viewport = {
@@ -30,7 +34,7 @@ function Header() {
     <header className="site-header">
       <div className="wrap">
         <a className="brand" href="/">
-          <span className="brand-mark" aria-hidden="true" />
+          <img className="brand-mark" src="/icon.png" alt="" width="30" height="30" />
           ROM Packer
         </a>
         <nav className="site-nav">

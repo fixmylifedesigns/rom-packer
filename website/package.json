@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "prepare:icon": "node scripts/prepare-icon.mjs",
+    "prebuild": "node scripts/prepare-icon.mjs",
+    "predev": "node scripts/prepare-icon.mjs"
   },
   "dependencies": {
     "next": "15.1.6",
